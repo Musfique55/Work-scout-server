@@ -7,7 +7,7 @@ const cors = require('cors');
 app.use(cors());
 app.use(express.json());
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri =`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.lzevybe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 
@@ -64,6 +64,52 @@ async function run() {
       const update = await userCollection.updateOne(query,dec);
       const result = await taskCollection.insertOne(task);
       res.send(result);
+    })
+
+    app.get('/alltasks', async(req,res) => {
+      const email = req.query.email;
+      const query = {email : email};
+      const options = {
+        sort : {deadline : -1}
+      }
+      const result = await taskCollection.find(query,options).toArray();
+      res.send(result);
+    })
+
+    app.get('/alltasks/:id',async(req,res) => {
+      const id = req.params.id;
+      const filter = {_id : new ObjectId(id)};
+      const result = await taskCollection.findOne(filter);
+      res.send(result);
+    })
+
+    app.patch('/alltasks/:id',async(req,res) => {
+      const id = req.params.id;
+      const filter = {_id : new ObjectId(id)};
+      const info = req.body;
+      const options = { upsert: true };
+      const update = {
+        $set : {
+          title : info.title,
+          details : info.details
+        }
+      }
+      const result = await taskCollection.updateOne(filter,update,options);
+      res.send(result);
+    })
+
+    app.delete('/alltasks/:id',async(req,res) => {
+        const id = req.params.id;
+        const query = {_id : new ObjectId(id)};
+        const found = await taskCollection.findOne(query);
+        const filter = {email : found.email};
+        const total = found.quantity * found.amount;
+        const updateDoc = {
+          $inc : {coins : total}
+        }
+        const update = await userCollection.updateOne(filter,updateDoc);
+        const result = await taskCollection.deleteOne(query);
+        res.send(result);
     })
 
     // Send a ping to confirm a successful connection
