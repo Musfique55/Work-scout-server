@@ -28,6 +28,7 @@ async function run() {
    
     const userCollection = client.db("workScoutDB").collection("users");
     const taskCollection = client.db("workScoutDB").collection("alltasks");
+    const submissionCollection = client.db("workScoutDB").collection("submission");
 
     app.post('/users', async(req,res) => {
       const email = req.body.email;
@@ -68,7 +69,10 @@ async function run() {
 
     app.get('/alltasks', async(req,res) => {
       const email = req.query.email;
-      const query = {email : email};
+      let query = {};
+      if(email){
+        query = {email : email};
+      }
       const options = {
         sort : {deadline : -1}
       }
@@ -110,6 +114,18 @@ async function run() {
         const update = await userCollection.updateOne(filter,updateDoc);
         const result = await taskCollection.deleteOne(query);
         res.send(result);
+    })
+
+    // submissions
+    app.post('/submissions', async(req,res) => {
+      const info = req.body;
+      const result = await submissionCollection.insertOne(info);
+      res.send(result);
+    })
+
+    app.get('/submissions',async(req,res) => {
+      const result = await submissionCollection.find().toArray();
+      res.send(result);
     })
 
     // Send a ping to confirm a successful connection
