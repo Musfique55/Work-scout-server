@@ -124,7 +124,12 @@ async function run() {
     })
 
     app.get('/submissions',async(req,res) => {
-      const result = await submissionCollection.find().toArray();
+      const email = req.query.email;
+      let query = {};
+      if(email){
+        query = {email : email}
+      }
+      const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
 
