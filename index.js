@@ -29,6 +29,7 @@ async function run() {
     const userCollection = client.db("workScoutDB").collection("users");
     const taskCollection = client.db("workScoutDB").collection("alltasks");
     const submissionCollection = client.db("workScoutDB").collection("submission");
+    const approvedCollection = client.db("workScoutDB").collection("approved");
 
 
     // user
@@ -64,7 +65,7 @@ async function run() {
       const quantity = req.body.task_quantity;
       const total = amount * quantity;
       const dec = {$inc : {coins : -total}}
-      const update = await userCollection.updateOne(query,dec);
+      await userCollection.updateOne(query,dec);
       const result = await taskCollection.insertOne(task);
       res.send(result);
     })
@@ -113,7 +114,7 @@ async function run() {
         const updateDoc = {
           $inc : {coins : total}
         }
-        const update = await userCollection.updateOne(filter,updateDoc);
+        await userCollection.updateOne(filter,updateDoc);
         const result = await taskCollection.deleteOne(query);
         res.send(result);
     })
@@ -121,12 +122,24 @@ async function run() {
     // submissions
     app.post('/submissions', async(req,res) => {
       const info = req.body;
+      const filter = {
+        _id : new ObjectId(req.body.task_id),
+      }
+      const  update = {
+        $inc : {task_quantity : -1}
+      }
+      await taskCollection.updateOne(filter,update)
       const result = await submissionCollection.insertOne(info);
       res.send(result);
     })
 
     app.get('/submissions',async(req,res) => {
-      const result = await submissionCollection.find().toArray();
+      const email = req.query.email;
+      const query = {
+        worker_email : email,
+        status : 'approved'
+      }
+      const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
     app.get('/submission/:email',async(req,res) => {
@@ -137,7 +150,9 @@ async function run() {
     })
     app.get('/submissions/:email',async(req,res) => {
       const email = req.params.email;
-      const query = {worker_email : email}
+      const query = {
+        worker_email : email,
+      }
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
@@ -145,7 +160,7 @@ async function run() {
     app.patch('/submissions/:id', async(req,res) => {
       const id = req.params.id;
       const action = req.body.approve;
-      const worker_email = req.body.worker_email;
+      const workerEmail = req.body.worker_email;
       const filter = {_id : new ObjectId(id)};
       const update = {
         $set : {
@@ -154,24 +169,36 @@ async function run() {
       }
       const options = {upsert : true};
       if(action === 'approved'){
-        const query = {email : worker_email};
+        const query = {email : workerEmail};
         const inc = {
-          $inc : {coins : req.body.amount}
+          $inc : {coins : req.body.payable_amount}
         }
-        await userCollection.updateOne(query,inc)
+        await userCollection.updateOne(query,inc);
+
       }
       const result = await submissionCollection.updateOne(filter,update,options);
       res.send(result);
     })
 
 
-    // worker stats
-    // app.get('/worker-stats/:email',async(req,res) => {
-    //   const email = req.params.email;
-    //   let query = {worker_email : email};
-    //   const submissionCount = await submissionCollection.find(query).;
-    //   res.send({count : submissionCount});
-    // })
+    // approved tasks
+    app.post('/approved', async(req,res) => {
+      const completed = req.body;
+      const approved = await approvedCollection.insertOne(completed);
+      res.send(approved); 
+    })
+
+    app.get('/approved',async(req,res) => {
+        const email = req.query.email;
+        let query = {};
+        if(email){
+          query = {worker_email : email}
+        }
+        const result = await approvedCollection.find(query).toArray(); 
+        res.send(result);
+    })
+
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
