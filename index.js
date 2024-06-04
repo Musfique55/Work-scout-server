@@ -145,6 +145,7 @@ async function run() {
     app.patch('/submissions/:id', async(req,res) => {
       const id = req.params.id;
       const action = req.body.approve;
+      const worker_email = req.body.worker_email;
       const filter = {_id : new ObjectId(id)};
       const update = {
         $set : {
@@ -152,6 +153,13 @@ async function run() {
         }
       }
       const options = {upsert : true};
+      if(action === 'approved'){
+        const query = {email : worker_email};
+        const inc = {
+          $inc : {coins : req.body.amount}
+        }
+        await userCollection.updateOne(query,inc)
+      }
       const result = await submissionCollection.updateOne(filter,update,options);
       res.send(result);
     })
