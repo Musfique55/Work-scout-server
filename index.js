@@ -58,8 +58,8 @@ async function run() {
       const task = req.body;
       const email = req.body.email;
       const query = {email : email};
-      const amount = req.body.amount;
-      const quantity = req.body.quantity;
+      const amount = req.body.payable_amount;
+      const quantity = req.body.task_quantity;
       const total = amount * quantity;
       const dec = {$inc : {coins : -total}}
       const update = await userCollection.updateOne(query,dec);
@@ -71,7 +71,7 @@ async function run() {
       const email = req.query.email;
       let query = {};
       if(email){
-        query = {email : email};
+        query = {creator_email : email};
       }
       const options = {
         sort : {deadline : -1}
@@ -106,8 +106,8 @@ async function run() {
         const id = req.params.id;
         const query = {_id : new ObjectId(id)};
         const found = await taskCollection.findOne(query);
-        const filter = {email : found.email};
-        const total = found.quantity * found.amount;
+        const filter = { email: found.creator_email};
+        const total = found.task_quantity * found.payable_amount;
         const updateDoc = {
           $inc : {coins : total}
         }
