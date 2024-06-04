@@ -30,6 +30,8 @@ async function run() {
     const taskCollection = client.db("workScoutDB").collection("alltasks");
     const submissionCollection = client.db("workScoutDB").collection("submission");
 
+
+    // user
     app.post('/users', async(req,res) => {
       const email = req.body.email;
       const query = {email : email};
@@ -124,14 +126,44 @@ async function run() {
     })
 
     app.get('/submissions',async(req,res) => {
-      const email = req.query.email;
-      let query = {};
-      if(email){
-        query = {email : email}
-      }
+      const result = await submissionCollection.find().toArray();
+      res.send(result);
+    })
+    app.get('/submission/:email',async(req,res) => {
+      const email = req.params.email;
+      const query = {creator_email : email};
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
+    app.get('/submissions/:email',async(req,res) => {
+      const email = req.params.email;
+      const query = {worker_email : email}
+      const result = await submissionCollection.find(query).toArray();
+      res.send(result);
+    })
+
+    app.patch('/submissions/:id', async(req,res) => {
+      const id = req.params.id;
+      const action = req.body.approve;
+      const filter = {_id : new ObjectId(id)};
+      const update = {
+        $set : {
+          status : action
+        }
+      }
+      const options = {upsert : true};
+      const result = await submissionCollection.updateOne(filter,update,options);
+      res.send(result);
+    })
+
+
+    // worker stats
+    // app.get('/worker-stats/:email',async(req,res) => {
+    //   const email = req.params.email;
+    //   let query = {worker_email : email};
+    //   const submissionCount = await submissionCollection.find(query).;
+    //   res.send({count : submissionCount});
+    // })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
