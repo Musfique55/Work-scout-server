@@ -69,7 +69,7 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/users',async(req,res) => {
+    app.get('/users',verifyToken,async(req,res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     })
@@ -81,7 +81,7 @@ async function run() {
     })
 
     // tasks
-    app.post('/alltasks',async(req,res) => {
+    app.post('/alltasks',verifyToken,async(req,res) => {
       const task = req.body;
       const email = req.body.email;
       const query = {email : email};
@@ -94,16 +94,14 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/alltasks', async(req,res) => {
+    app.get('/alltasks',verifyToken, async(req,res) => {
       const email = req.query.email;
       let query = {};
       if(email){
         query = {creator_email : email};
       }
-      const options = {
-        sort : {deadline : -1}
-      }
-      const result = await taskCollection.find(query,options).toArray();
+
+      const result = await taskCollection.find(query).toArray();
       res.send(result);
     })
 
@@ -114,7 +112,7 @@ async function run() {
       res.send(result);
     })
 
-    app.patch('/alltasks/:id',async(req,res) => {
+    app.patch('/alltasks/:id',verifyToken,async(req,res) => {
       const id = req.params.id;
       const filter = {_id : new ObjectId(id)};
       const info = req.body;
@@ -129,7 +127,7 @@ async function run() {
       res.send(result);
     })
 
-    app.delete('/alltasks/:id',async(req,res) => {
+    app.delete('/alltasks/:id',verifyToken,async(req,res) => {
         const id = req.params.id;
         const query = {_id : new ObjectId(id)};
         const found = await taskCollection.findOne(query);
@@ -144,7 +142,7 @@ async function run() {
     })
 
     // submissions
-    app.post('/submissions', async(req,res) => {
+    app.post('/submissions',verifyToken, async(req,res) => {
       const info = req.body;
       const filter = {
         _id : new ObjectId(req.body.task_id),
@@ -157,7 +155,7 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/submissions',async(req,res) => {
+    app.get('/submissions',verifyToken,async(req,res) => {
       const email = req.query.email;
       const query = {
         worker_email : email,
@@ -166,7 +164,7 @@ async function run() {
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
-    app.get('/submission/:email',async(req,res) => {
+    app.get('/submission/:email',verifyToken,async(req,res) => {
       const email = req.params.email;
       const query = {creator_email : email};
       const result = await submissionCollection.find(query).toArray();
@@ -181,7 +179,7 @@ async function run() {
       res.send(result);
     })
 
-    app.patch('/submissions/:id', async(req,res) => {
+    app.patch('/submissions/:id',verifyToken, async(req,res) => {
       const id = req.params.id;
       const action = req.body.approve;
       const workerEmail = req.body.worker_email;
@@ -195,7 +193,7 @@ async function run() {
       if(action === 'approved'){
         const query = {email : workerEmail};
         const inc = {
-          $inc : {coins : req.body.payable_amount}
+          $inc : {coins : req.body.payable_amount,task_completion : 1}
         }
         await userCollection.updateOne(query,inc);
 
@@ -212,7 +210,7 @@ async function run() {
       res.send(approved); 
     })
 
-    app.get('/approved',async(req,res) => {
+    app.get('/approved',verifyToken,async(req,res) => {
         const email = req.query.email;
         let query = {};
         if(email){
@@ -222,6 +220,13 @@ async function run() {
         res.send(result);
     })
 
+    // top-earner 
+    app.get('/top-earners',async(req,res) => {
+      const result = await userCollection.aggregate([
+        {$sort : {coins : -1}}
+      ]).toArray();
+      res.send(result)
+    })
     
 
     // Send a ping to confirm a successful connection
