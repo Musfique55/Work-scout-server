@@ -1,11 +1,13 @@
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 2000;
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const cors = require('cors');
 
 app.use(cors());
 app.use(express.json());
+
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri =`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.lzevybe.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -31,6 +33,28 @@ async function run() {
     const submissionCollection = client.db("workScoutDB").collection("submission");
     const approvedCollection = client.db("workScoutDB").collection("approved");
 
+
+    // jwt
+    app.post('/jwt',(req,res) => {
+      const user = req.body;
+      const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRET,{expiresIn : '1h'})
+      res.send({token});
+    })
+
+    // verify token
+    const verifyToken = async(req,res,next) => {
+      if(!req.headers.authorization){
+        return res.status(401).send({message : 'Unathorized Access'})
+      }
+      const token = req.headers.authorization.split(' ')[1];
+      jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,decoded) => {
+        if(err){
+          return res.status(400).send({message : 'Bad Request'})
+        }
+        req.user = decoded;
+        next();
+      })
+    }
 
     // user
     app.post('/users', async(req,res) => {
@@ -148,7 +172,7 @@ async function run() {
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
-    app.get('/submissions/:email',async(req,res) => {
+    app.get('/submissions/:email',verifyToken,async(req,res) => {
       const email = req.params.email;
       const query = {
         worker_email : email,
@@ -182,7 +206,7 @@ async function run() {
 
 
     // approved tasks
-    app.post('/approved', async(req,res) => {
+    app.post('/approved',verifyToken, async(req,res) => {
       const completed = req.body;
       const approved = await approvedCollection.insertOne(completed);
       res.send(approved); 
