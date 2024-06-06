@@ -80,6 +80,18 @@ async function run() {
       res.send(result);
     })
 
+    app.patch('/users',verifyToken,async(req,res) => {
+        const role = req.body.role;
+        const filter = {email : req.body.worker_email};
+        const update = {
+          $set : {
+            role : role
+          }
+        }
+        const result = await userCollection.updateOne(filter,update);
+        res.send(result);
+    })
+
     // tasks
     app.post('/alltasks',verifyToken,async(req,res) => {
       const task = req.body;
