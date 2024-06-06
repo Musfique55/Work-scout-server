@@ -32,7 +32,7 @@ async function run() {
     const taskCollection = client.db("workScoutDB").collection("alltasks");
     const submissionCollection = client.db("workScoutDB").collection("submission");
     const approvedCollection = client.db("workScoutDB").collection("approved");
-
+    const subscribersCollection = client.db("workScoutDB").collection('subscribers');
 
     // jwt
     app.post('/jwt',(req,res) => {
@@ -227,8 +227,26 @@ async function run() {
       ]).toArray();
       res.send(result)
     })
-    
 
+    // all-coins
+    app.get('/total-coins',async(req,res) => {
+      const totalCoins = await userCollection.aggregate([
+        {
+          $group : {
+            _id : null,
+            total_coins : {$sum : '$coins'}
+          }
+        }
+      ]).toArray();
+      res.send(totalCoins);
+    })
+    
+    // subscribers
+    app.post('/subscribers',async(req,res) => {
+      const email = req.body;
+      const result = await subscribersCollection.insertOne(email);
+      res.send(result);
+    })
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
