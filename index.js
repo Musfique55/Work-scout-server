@@ -51,9 +51,22 @@ async function run() {
         if(err){
           return res.status(400).send({message : 'Bad Request'})
         }
-        req.user = decoded;
+        req.decoded = decoded;
         next();
       })
+    }
+
+    // verify Admin
+
+    const verifyAdmin = async(req,res,next) => {
+      const email = req.decoded.email;
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      const isAdmin = user.role === "admin";
+      if(!isAdmin){
+        return res.status(403).send({message : 'Forbidden Access'});
+      }
+      next();
     }
 
     // user
@@ -69,7 +82,21 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/users',verifyToken,async(req,res) => {
+    app.get('/users/admin/:email',verifyToken, async(req,res) => {
+      const email = req.params.email;
+      if(email !== req.decoded.email){
+        return res.status(401).send({message : 'Unauthorized Access'})
+      }
+      const query  = {email : email};
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if(user){
+        admin = user.role === 'admin';
+      }
+      res.send({admin});
+    })
+
+    app.get('/users',verifyToken,verifyAdmin,async(req,res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     })
@@ -89,6 +116,13 @@ async function run() {
           }
         }
         const result = await userCollection.updateOne(filter,update);
+        res.send(result);
+    })
+
+    app.delete('/users/:id',async(req,res) => {
+        const id = req.params.id;
+        const query = {_id : new ObjectId(id)};
+        const result = await userCollection.deleteOne(query);
         res.send(result);
     })
 
