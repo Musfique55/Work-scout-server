@@ -5,7 +5,13 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const cors = require('cors');
 
-app.use(cors());
+const corsOptions = {
+  origin: ['http://localhost:5173'],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 
@@ -33,7 +39,8 @@ async function run() {
     const submissionCollection = client.db("workScoutDB").collection("submission");
     const approvedCollection = client.db("workScoutDB").collection("approved");
     const subscribersCollection = client.db("workScoutDB").collection('subscribers');
-
+    const withdrawCollection = client.db("workScoutDB").collection('withdraws');
+    const withdrawSuccessCollection = client.db("workScoutDB").collection('withdrawsSuccess');
     // jwt
     app.post('/jwt',(req,res) => {
       const user = req.body;
@@ -69,6 +76,30 @@ async function run() {
       next();
     }
 
+    // verifyManager 
+    const verifyManager = async(req,res,next) => {
+      const email = req.decoded.email;
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      const isManager = user.role === "taskCreator";
+      if(!isManager){
+        return res.status(403).send({message : 'Forbidden Access'});
+      }
+      next();
+    }
+
+    // verifyWorker
+    const verifyWorker = async(req,res,next) => {
+      const email = req.decoded.email;
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      const isWorker = user.role === "worker";
+      if(!isWorker){
+        res.status(403).send({message : 'Forbidden Access'})
+      }
+      next();
+    }
+
     // user
     app.post('/users', async(req,res) => {
       const email = req.body.email;
@@ -82,6 +113,7 @@ async function run() {
       res.send(result);
     })
 
+    // admin url
     app.get('/users/admin/:email',verifyToken, async(req,res) => {
       const email = req.params.email;
       if(email !== req.decoded.email){
@@ -92,8 +124,40 @@ async function run() {
       let admin = false;
       if(user){
         admin = user.role === 'admin';
+      }else{
+        return res.status(403).send({message : "Forbidden Access"})
       }
       res.send({admin});
+    })
+
+    // manager url 
+    app.get('/users/task-creator/:email',verifyToken,async(req,res) => {
+      const email = req.params.email;
+      if(email !== req.decoded.email){
+        return res.status(401).send({message : 'Unauthorized Access'});
+      }
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      let manager = false;
+      if(user){
+        manager = user.role === "taskCreator"
+      }
+      res.send({manager});
+    })
+
+    // worker url 
+    app.get('/users/worker/:email',verifyToken,async(req,res) => {
+      const email = req.params.email;
+      if(email !== req.decoded.email){
+        return res.status(401).send({message : 'Unauthorized Access'});
+      }
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      let worker = false;
+      if(user){
+        worker = user.role === 'worker'
+      }
+      res.send({worker});
     })
 
     app.get('/users',verifyToken,verifyAdmin,async(req,res) => {
@@ -119,7 +183,7 @@ async function run() {
         res.send(result);
     })
 
-    app.delete('/users/:id',async(req,res) => {
+    app.delete('/users/:id',verifyToken,verifyAdmin,async(req,res) => {
         const id = req.params.id;
         const query = {_id : new ObjectId(id)};
         const result = await userCollection.deleteOne(query);
@@ -127,7 +191,7 @@ async function run() {
     })
 
     // tasks
-    app.post('/alltasks',verifyToken,async(req,res) => {
+    app.post('/alltasks',verifyToken,verifyManager,async(req,res) => {
       const task = req.body;
       const email = req.body.email;
       const query = {email : email};
@@ -151,14 +215,14 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/alltasks/:id',async(req,res) => {
+    app.get('/alltasks/:id',verifyToken,async(req,res) => {
       const id = req.params.id;
       const filter = {_id : new ObjectId(id)};
       const result = await taskCollection.findOne(filter);
       res.send(result);
     })
 
-    app.patch('/alltasks/:id',verifyToken,async(req,res) => {
+    app.patch('/alltasks/:id',verifyToken,verifyManager,async(req,res) => {
       const id = req.params.id;
       const filter = {_id : new ObjectId(id)};
       const info = req.body;
@@ -194,7 +258,7 @@ async function run() {
         _id : new ObjectId(req.body.task_id),
       }
       const  update = {
-        $inc : {task_quantity : -1}
+        $inc : {availability : -1}
       }
       await taskCollection.updateOne(filter,update)
       const result = await submissionCollection.insertOne(info);
@@ -266,6 +330,32 @@ async function run() {
         res.send(result);
     })
 
+    // withdraw collection 
+
+    app.post('/withdraws',verifyToken,verifyWorker,async(req,res) => {
+      const withdraw = req.body;
+      const result = await withdrawCollection.insertOne(withdraw);
+      res.send(result);
+    })
+
+    app.get('/withdraws',verifyToken,verifyAdmin,async(req,res) => {
+        const result = await withdrawCollection.find().toArray();
+        res.send(result);
+    })
+
+    app.post('/withdraw-success',async(req,res) => {
+      const info = req.body;
+      const query = {_id : new ObjectId(req.body.id)};
+      await withdrawCollection.deleteOne(query);
+      const filter = {email : req.body.email}
+      const update = {
+        $inc : {coins : -req.body.coins}
+      }
+      await userCollection.updateOne(filter,update);
+      const result = await withdrawSuccessCollection.insertOne(info);
+      res.send(result);
+    })
+
     // top-earner 
     app.get('/top-earners',async(req,res) => {
       const result = await userCollection.aggregate([
@@ -275,7 +365,7 @@ async function run() {
     })
 
     // all-coins
-    app.get('/total-coins',async(req,res) => {
+    app.get('/total-coins',verifyToken,verifyAdmin,async(req,res) => {
       const totalCoins = await userCollection.aggregate([
         {
           $group : {
