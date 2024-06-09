@@ -41,6 +41,7 @@ async function run() {
     const subscribersCollection = client.db("workScoutDB").collection('subscribers');
     const withdrawCollection = client.db("workScoutDB").collection('withdraws');
     const withdrawSuccessCollection = client.db("workScoutDB").collection('withdrawsSuccess');
+    const notificationCollection = client.db('workScoutDB').collection('notifications') 
     // jwt
     app.post('/jwt',(req,res) => {
       const user = req.body;
@@ -179,13 +180,19 @@ async function run() {
             role : role
           }
         }
+        const notification = {
+          message:`Your current role is ${role}`,
+          ToEmail: req.body.worker_email,
+          Time: new Date().toDateString()
+        };
+        await notificationCollection.insertOne(notification);
         const result = await userCollection.updateOne(filter,update);
         res.send(result);
-    })
+      })
 
     app.delete('/users/:id',verifyToken,verifyAdmin,async(req,res) => {
         const id = req.params.id;
-        const query = {_id : new ObjectId(id)};
+        const query = {_id : new ObjectId(id)};    
         const result = await userCollection.deleteOne(query);
         res.send(result);
     })
@@ -215,7 +222,7 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/alltasks/:id',verifyToken,async(req,res) => {
+    app.get('/alltasks/:id',async(req,res) => {
       const id = req.params.id;
       const filter = {_id : new ObjectId(id)};
       const result = await taskCollection.findOne(filter);
@@ -301,12 +308,26 @@ async function run() {
       }
       const options = {upsert : true};
       if(action === 'approved'){
+        const notification = {
+          message:`you have earned ${req.body.payable_amount} coins from ${req.body.creator_name} for completing ${req.body.task_title}`,
+          ToEmail: workerEmail,
+          Time: new Date().toDateString()
+        };
+        await notificationCollection.insertOne(notification);
+      }else{
+        const notification = {
+          message:`Your task ${req.body.task_title} has been rejected by ${req.body.creator_name}`,
+          ToEmail: workerEmail,
+          Time: new Date().toDateString()
+        };
+       await notificationCollection.insertOne(notification);
+      }
+      if(action === 'approved'){
         const query = {email : workerEmail};
         const inc = {
           $inc : {coins : req.body.payable_amount,task_completion : 1}
         }
         await userCollection.updateOne(query,inc);
-
       }
       const result = await submissionCollection.updateOne(filter,update,options);
       res.send(result);
@@ -327,6 +348,14 @@ async function run() {
           query = {worker_email : email}
         }
         const result = await approvedCollection.find(query).toArray(); 
+        res.send(result);
+    })
+
+    // notification collection
+    app.get('/notifications',async(req,res) => {
+        const email = req.query.email;
+        const query = {ToEmail : email}; 
+        const result = await notificationCollection.find(query).toArray();
         res.send(result);
     })
 
