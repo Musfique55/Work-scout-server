@@ -3,6 +3,7 @@ const app = express();
 const port = process.env.PORT || 2000;
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const stripe = require('stripe')(process.env.DB_PAYMENT_SECRET)
 const cors = require('cors');
 
 const corsOptions = {
@@ -41,7 +42,8 @@ async function run() {
     const subscribersCollection = client.db("workScoutDB").collection('subscribers');
     const withdrawCollection = client.db("workScoutDB").collection('withdraws');
     const withdrawSuccessCollection = client.db("workScoutDB").collection('withdrawsSuccess');
-    const notificationCollection = client.db('workScoutDB').collection('notifications') 
+    const notificationCollection = client.db('workScoutDB').collection('notifications');
+    const paymentCollection = client.db('workScoutDB').collection('payments'); 
     // jwt
     app.post('/jwt',(req,res) => {
       const user = req.body;
@@ -100,6 +102,33 @@ async function run() {
       }
       next();
     }
+
+    // payments
+    app.post('/create-payment-intent',async(req,res) => {
+        const {price} = req.body;
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount : price * 100,
+          currency : "usd",
+          payment_method_types : ['card']
+        })
+        res.send({clientSecret : paymentIntent.client_secret})
+    })
+
+    app.post('/payments',async(req,res) => {
+      const info = req.body;
+      const filter = {email : info.email};
+      const updateDoc = {
+        $inc : {coins : info.coins}
+      }
+      await userCollection.updateOne(filter,updateDoc);
+      const result = await paymentCollection.insertOne(info);
+      res.send(result);
+    })
+
+    app.get('/payments',async(req,res) => {
+        const result = await paymentCollection.find().toArray();
+        res.send(result);
+    })
 
     // user
     app.post('/users', async(req,res) => {
