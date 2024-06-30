@@ -7,8 +7,8 @@ const stripe = require('stripe')(process.env.DB_PAYMENT_SECRET)
 const cors = require('cors');
 
 const corsOptions = {
-  origin: ['http://localhost:5173'],
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  origin: ['https://work-scout-3a179.web.app'],
+  methods: ['GET,HEAD,PUT,PATCH,POST,DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 };
@@ -32,8 +32,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    
    
     const userCollection = client.db("workScoutDB").collection("users");
     const taskCollection = client.db("workScoutDB").collection("alltasks");
@@ -44,6 +43,7 @@ async function run() {
     const withdrawSuccessCollection = client.db("workScoutDB").collection('withdrawsSuccess');
     const notificationCollection = client.db('workScoutDB').collection('notifications');
     const paymentCollection = client.db('workScoutDB').collection('payments'); 
+    const searchCollection = client.db('workScoutDB').collection('suggestions'); 
     // jwt
     app.post('/jwt',(req,res) => {
       const user = req.body;
@@ -102,6 +102,13 @@ async function run() {
       }
       next();
     }
+    // suggetions
+
+    app.get('/search',async(req,res) => {
+      const query = req.query.q;
+      const result = await searchCollection.find({task_title : new RegExp(query,"i")}).limit(5).toArray();
+      res.send(result);  
+    })
 
     // payments
     app.post('/create-payment-intent',async(req,res) => {
@@ -114,7 +121,7 @@ async function run() {
         res.send({clientSecret : paymentIntent.client_secret})
     })
 
-    app.post('/payments',async(req,res) => {
+    app.post('/payments',verifyToken,verifyManager,async(req,res) => {
       const info = req.body;
       const filter = {email : info.email};
       const updateDoc = {
@@ -125,9 +132,16 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/payments',async(req,res) => {
+    app.get('/payments',verifyToken,verifyAdmin,async(req,res) => {
         const result = await paymentCollection.find().toArray();
         res.send(result);
+    })
+
+    app.get('/payments/:email',verifyToken,async(req,res) => {
+      const email = req.params.email;
+      const query = {email : email};
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result); 
     })
 
     // user
@@ -227,16 +241,23 @@ async function run() {
     })
 
     // tasks
-    app.post('/alltasks',verifyToken,verifyManager,async(req,res) => {
+    app.post('/alltasks',verifyToken,async(req,res) => {
       const task = req.body;
-      const email = req.body.email;
+      const id = new ObjectId();
+      const search = {
+        _id : id,
+        task_title : req.body.task_title
+      }
+      const tasks = {...task,_id : id}
+      const email = req.body.creator_email;
       const query = {email : email};
       const amount = req.body.payable_amount;
       const quantity = req.body.task_quantity;
       const total = amount * quantity;
       const dec = {$inc : {coins : -total}}
       await userCollection.updateOne(query,dec);
-      const result = await taskCollection.insertOne(task);
+      await searchCollection.insertOne(search);
+      const result = await taskCollection.insertOne(tasks);
       res.send(result);
     })
 
@@ -265,8 +286,9 @@ async function run() {
       const options = { upsert: true };
       const update = {
         $set : {
-          title : info.title,
-          details : info.details
+          task_title : info.title,
+          task_detail : info.details,
+          submission_info : info.subInfo
         }
       }
       const result = await taskCollection.updateOne(filter,update,options);
@@ -310,19 +332,29 @@ async function run() {
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
+
+
     app.get('/submission/:email',verifyToken,async(req,res) => {
       const email = req.params.email;
       const query = {creator_email : email};
       const result = await submissionCollection.find(query).toArray();
       res.send(result);
     })
-    app.get('/submissions/:email',verifyToken,async(req,res) => {
+    app.get('/submissions/:email',async(req,res) => {
       const email = req.params.email;
       const query = {
         worker_email : email,
       }
-      const result = await submissionCollection.find(query).toArray();
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const result = await submissionCollection.find(query).skip((page-1) * limit).limit(limit).toArray();
       res.send(result);
+    })
+
+    app.get('/total-submissions',async(req,res) => {
+      const query = {worker_email :req.query.email};
+      const count = await submissionCollection.countDocuments(query);
+      res.send({count})
     })
 
     app.patch('/submissions/:id',verifyToken, async(req,res) => {
@@ -381,7 +413,7 @@ async function run() {
     })
 
     // notification collection
-    app.get('/notifications',async(req,res) => {
+    app.get('/notifications',verifyToken,async(req,res) => {
         const email = req.query.email;
         const query = {ToEmail : email}; 
         const result = await notificationCollection.find(query).toArray();
